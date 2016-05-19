@@ -453,8 +453,15 @@ class TestRunnerManager(threading.Thread):
             self.logger.debug("Testrunner exited with code %i" % self.test_runner_proc.exitcode)
 
     def runner_teardown(self):
-        self.ensure_runner_stopped()
-        return Stop
+        self.logger.debug("Kill the browser process")
+        if self.test_runner_proc is None:
+            return
+        try:
+            self.browser.stop()
+            self.browser_started = False
+            self.ensure_runner_stopped()
+        finally:
+            self.init()
 
     def stop_runner(self):
         """Stop the TestRunner and the Firefox binary."""
@@ -462,11 +469,8 @@ class TestRunnerManager(threading.Thread):
         if self.test_runner_proc is None:
             return
         try:
-            self.browser.stop()
-            self.browser_started = False
             if self.test_runner_proc.is_alive():
                 self.send_message("stop")
-                self.ensure_runner_stopped()
         finally:
             self.cleanup()
 
@@ -547,7 +551,7 @@ class TestRunnerManager(threading.Thread):
         if self.restart_count >= self.max_restarts:
             return Stop
         self.stop_runner()
-        return self.init()
+        return
 
     def log(self, action, kwargs):
         getattr(self.logger, action)(**kwargs)
