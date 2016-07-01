@@ -491,11 +491,27 @@ class TestRunnerManager(threading.Thread):
         # Write the result of each subtest
         file_result, test_results = results
         subtest_unexpected = False
+
+        subtest_count = 0
+        expected = test.expected()
+        status = file_result.status if file_result.status != "EXTERNAL-TIMEOUT" else "TIMEOUT"
+        message=file_result.message
+        stack = ""
+        extra=file_result.extra
+
+        # Testharness executor uses and only uses the subtests to return data
+        # But there is only 1 subtest used in testharness executor
+        # And also we expect to use the logger.test_end() to output the final restult
+        # So here the subtest data should be reserved for logger.test_end()
         for result in test_results:
             if test.disabled(result.name):
                 continue
             expected = test.expected(result.name)
             is_unexpected = expected != result.status
+            subtest_count += 1
+            status = result.status
+            message = result.message
+            stack=result.stack
 
             if is_unexpected:
                 self.unexpected_count += 1
@@ -511,20 +527,25 @@ class TestRunnerManager(threading.Thread):
         # TODO: consider changing result if there is a crash dump file
 
         # Write the result of the test harness
-        expected = test.expected()
-        status = file_result.status if file_result.status != "EXTERNAL-TIMEOUT" else "TIMEOUT"
-        is_unexpected = expected != status
-        if is_unexpected:
-            self.unexpected_count += 1
-            self.logger.debug("Unexpected count in this thread %i" % self.unexpected_count)
-        if status == "CRASH":
-            self.browser.log_crash(process=self.browser_pid, test=test.id)
+        # Reftest executor does not use the subtests
+        # It uses the file_result to return data
+        # Seperate the reftest and harnesstest because of their differences
+        if subtest_count: # testharness cases
+            self.logger.info("Subtests count in this test is %i" % subtest_count)
+        else: # reftest cases
+            is_unexpected = expected != status
+            if is_unexpected:
+                self.unexpected_count += 1
+                self.logger.debug("Unexpected count in this thread %i" % self.unexpected_count)
+            if status == "CRASH":
+                self.browser.log_crash(process=self.browser_pid, test=test.id)
 
         self.logger.test_end(test.id,
-                             status,
-                             message=file_result.message,
+                             status=status,
                              expected=expected,
-                             extra=file_result.extra)
+                             message=message,
+                             stack=stack,
+                             extra=extra)
 
         self.test = None
 
